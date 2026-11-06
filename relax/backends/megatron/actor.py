@@ -2802,6 +2802,10 @@ class MegatronTrainRayActor(TrainRayActor):
             "sample_index_mask_sums",
             "group_index",
         ]
+        from relax.utils.generation_provenance import RECORD_FIELD, enabled
+
+        if enabled():
+            data_fields.append(RECORD_FIELD)
         # In true on-policy mode, actor_fwd is absent and old_log_probs is
         # recomputed inline from the train forward (see policy_loss_function).
         if self.args.advantage_estimator == "score_centering":

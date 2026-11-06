@@ -15,6 +15,7 @@ import numpy as np
 import torch
 
 from relax.agentic.profile import TRACE_KEY, merge_agentic_trace
+from relax.utils.generation_provenance import METADATA_KEY, begin_sample, enabled as provenance_enabled, take_turn
 from relax.utils.types import Sample
 
 
@@ -801,6 +802,7 @@ class SessionForest:
         wall_elapsed_s = 0.0
         generation_elapsed_s = 0.0
         first_response_node: MsgNode | None = None
+        provenance = begin_sample(self.session_id) if provenance_enabled() else None
 
         for idx, node in enumerate(lineage):
             tokens.extend(node.train_token_delta)
@@ -811,6 +813,13 @@ class SessionForest:
             if node.multimodal_train_inputs_delta is not None:
                 multimodal_train_inputs_buffer.append(node.multimodal_train_inputs_delta)
             if node.kind == "resp":
+                if provenance is not None:
+                    take_turn(
+                        provenance,
+                        node.export_metadata_patch,
+                        absolute_start=len(tokens) - len(node.train_token_delta),
+                        turn=len(turns),
+                    )
                 if first_response_node is None:
                     first_response_node = node
                 turns.append(self._agentic_trace_turn_from_node(node, len(turns)))
@@ -868,6 +877,8 @@ class SessionForest:
         # path) see a single source of truth without having to know about
         # ``agentic_trace``.
         merged_metadata["rollout_turns"] = len(turns)
+        if provenance is not None:
+            merged_metadata[METADATA_KEY] = provenance
         sample = Sample(
             group_index=self.group_index,
             index=self.index,

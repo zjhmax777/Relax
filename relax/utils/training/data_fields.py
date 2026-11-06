@@ -102,4 +102,8 @@ def build_data_fields(args: Namespace, *, consumer: str = "actor") -> list[str]:
         from relax.utils.opd.opd_utils import consume_opd_train_data
 
         consume_opd_train_data(fields, args)
+    from relax.utils.generation_provenance import RECORD_FIELD, enabled
+
+    if consumer == "actor" and enabled():
+        fields.append(RECORD_FIELD)
     return fields

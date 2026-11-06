@@ -215,6 +215,8 @@ class Envs(metaclass=_EnvsMeta):
     RELAX_OPD_PER_POS_TOKEN_IDS = EnvProperty("RELAX_OPD_PER_POS_TOKEN_IDS", bool, False)
     RELAX_OPTIMIZE_ROUTING_REPLAY = EnvProperty("RELAX_OPTIMIZE_ROUTING_REPLAY", bool, False)
     RELAX_FORCE_LOGPROBS_BASE64 = EnvProperty("RELAX_FORCE_LOGPROBS_BASE64", bool, False)
+    # Shared directory for published-sequence provenance. Unset disables the side record.
+    RELAX_GENERATION_PROVENANCE_DIR = EnvProperty("RELAX_GENERATION_PROVENANCE_DIR", str, None)
 
     # Qwen model compatibility and optional training kernels.
     RELAX_LOGPROB_FAST_PATH = EnvProperty("RELAX_LOGPROB_FAST_PATH", bool, False)

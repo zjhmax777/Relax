@@ -148,6 +148,13 @@ def convert_samples_to_train_data(args: Any, samples: list[Sample] | list[list[S
             sample.loss_mask = [0] * sample.response_length
         loss_masks.append(sample.loss_mask)
     train_data["loss_masks"] = loss_masks
+    from relax.utils.generation_provenance import METADATA_KEY, RECORD_FIELD, enabled, pack_record
+
+    if enabled():
+        train_data[RECORD_FIELD] = [
+            pack_record((sample.metadata or {}).get(METADATA_KEY) or {"session_id": sample.session_id, "turns": [], "segments": []})
+            for sample in samples
+        ]
     mask_sums_by_sample_index: dict[Any, int] = {}
     for sample_index, loss_mask in zip(sample_indices, loss_masks, strict=True):
         mask_sums_by_sample_index[sample_index] = mask_sums_by_sample_index.get(sample_index, 0) + int(sum(loss_mask))
@@ -461,6 +468,8 @@ def post_process_env(args, env):
 
     # Use the same file-scanning concurrency in the driver and SFT replicas.
     env["env_vars"].setdefault("RELAX_JSONL_INDEX_WORKERS", str(Envs.RELAX_JSONL_INDEX_WORKERS))
+    if Envs.RELAX_GENERATION_PROVENANCE_DIR:
+        env["env_vars"].setdefault("RELAX_GENERATION_PROVENANCE_DIR", Envs.RELAX_GENERATION_PROVENANCE_DIR)
 
     # ray-job.sh prepares the node-local cache before launching the inner Ray
     # job. Carry its resolved session into the runtime env that Controller

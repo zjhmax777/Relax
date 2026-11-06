@@ -694,6 +694,28 @@ Fully async retention does not require every carried session to follow this exac
 Program-aware admission can delay backend attempts based on predicted KV use. Session lifecycle can release Session
 radix-cache entries when a session ends. See [Agentic KV Scheduling](./agentic-kv-scheduling.md).
 
+## Generation provenance and publish lag
+
+When `RELAX_GENERATION_PROVENANCE_DIR` is set, Relax records token ranges and the engine's weight-version string only for generation that is successfully committed into a Session. Cancelled, uncommitted, or replaced segments stay out of the training statistics. Sampling and GRPO grouping are unchanged; the directory is a side channel.
+
+The published sequence starts at 1, the first successful rollout weight publish in a training job. A version string counts only when it is `pub/{run_id}/{seq}` and matches `publication.json` at the moment the actor loads the sample. Anything else stays unknown. It is not rewritten as 0 and it is not rewritten as the newest version. The same directory continues the previous run, so a new training job needs a new directory.
+
+The diagnostic counts tokens that enter training with loss mask 1, and it keeps three gaps separate:
+
+- `attempt_version_span`: max published sequence minus min published sequence inside one backend attempt.
+- `trajectory_version_span`: the same gap across the whole sample, including later turns after a tool wait.
+- `lag_after_final_commit`: publishes after the last response commit and before the actor reads the batch. Each turn also reports `publishes_since_commit` and `publishes_before_next_commit`, so publishes during a tool wait are not folded into a single attempt.
+
+`unknown_fraction` is unknown tokens divided by trained tokens. A sequence newer than the consumption head is `future_token_count`: it is left out of the weighted age and out of the missing-version rate. Sum the per-rank `diagnostics/rank-*.summary.json` files by token count. Do not average the weighted ages.
+
+Reproducible example: an agent sees two publishes while a tool call is in flight, then the report shows each turn's source sequence and the version age when training consumes the sample.
+
+```bash
+python -m examples.generation_provenance_demo --scenario complete
+```
+
+`missing` drops the second turn's version. `stale` keeps that turn on the sequence from before the wait.
+
 ## Operations and Troubleshooting
 
 ### Metrics and Dumps

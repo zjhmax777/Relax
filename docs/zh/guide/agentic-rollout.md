@@ -674,6 +674,28 @@ Fully async 留存不要求每个 session 都经过同一套 abort/resume 时序
 Program-aware admission 可以根据预测的 KV 使用量延迟 backend attempt。Session lifecycle 可以在 session 结束时
 释放 Session radix-cache entry。参见 [Agentic KV Scheduling](./agentic-kv-scheduling.md)。
 
+## 生成来源与发布滞后
+
+设置 `RELAX_GENERATION_PROVENANCE_DIR` 后，Relax 只为成功提交进 Session 的生成片段记下 token 区间和引擎返回的权重版本。取消、未提交、或被相同内容替换掉的片段不会进入训练统计。采样和 GRPO 分组保持原样；这个目录只是旁路诊断。
+
+发布序号从 1 开始，表示同一次训练任务里第一次成功的 rollout 权重发布。版本字符串必须是 `pub/{run_id}/{seq}`，并且能在训练读取该样本时对上同一份 `publication.json`。对不上的版本保持未知，不会被当成 0，也不会被当成当时最新的版本。同一个目录会接着上次的 run；新的训练任务应使用新目录。
+
+诊断按进入训练、且 loss mask 为 1 的 token 计算，并区分三件事：
+
+- `attempt_version_span`：同一次 backend attempt 内，已确认发布序号的最大减最小。
+- `trajectory_version_span`：整条样本里已确认发布序号的最大减最小，包括工具等待之后的后续轮次。
+- `lag_after_final_commit`：最后一轮 response 提交之后、actor 读到这个 batch 之前，又发布了多少次。每一轮另有 `publishes_since_commit` 和 `publishes_before_next_commit`，所以工具等待期间的发布不会混进单次 attempt 的跨度。
+
+`unknown_fraction` 是未知 token 占训练 token 的比例。序号比消费时的发布头还新的 token 单独计入 `future_token_count`，不进入加权年龄，也不算进缺失率。按 rank 写出的 `diagnostics/rank-*.summary.json` 要按 token 数相加，不能把加权年龄直接平均。
+
+可复现示例：agent 在工具等待期间经历两次发布，然后打印每一轮 token 的来源序号，以及训练消费时的版本年龄。
+
+```bash
+python -m examples.generation_provenance_demo --scenario complete
+```
+
+`missing` 表示后一轮没有版本；`stale` 表示后一轮仍停在等待前的发布序号。
+
 ## 运维与故障排除
 
 ### Metrics 与 Dump

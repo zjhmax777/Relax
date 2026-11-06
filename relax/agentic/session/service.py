@@ -69,6 +69,8 @@ from relax.agentic.session.state import (
     normalize_template_kwargs,
     normalize_tools,
 )
+from relax.utils.generation_provenance import enabled as provenance_enabled
+from relax.utils.generation_provenance import segments_from_attempt, stamp_commit
 from relax.utils.http_utils import is_router_no_available_workers
 from relax.utils.logging_utils import get_logger
 from relax.utils.types import get_spec_token_counts
@@ -2599,6 +2601,17 @@ class AgenticSessionShard:
     ) -> None:
         """Accumulate one backend attempt on the stable IR ref."""
 
+        if provenance_enabled() and result.new_tokens:
+            record = ir.pending_export_metadata_patch.setdefault("generation_provenance", {"segments": []})
+            record["segments"].extend(
+                segments_from_attempt(
+                    result.meta_info or {},
+                    len(result.new_tokens),
+                    offset=len(ir.pending_token_delta),
+                    request_id=ir.request_id,
+                    attempt_id=f"{ir.request_id}#{ir.abort_count}",
+                )
+            )
         ir.pending_token_delta.extend(result.new_tokens)
         ir.pending_logprob_delta.extend(result.new_log_probs)
         if getattr(result, "new_topk_token_ids", None) is not None:
@@ -2669,6 +2682,8 @@ class AgenticSessionShard:
                 "base_state_hash": ir.parent_state_hash,
             }
         )
+        if provenance_enabled():
+            stamp_commit(ir.pending_export_metadata_patch)
         forest = cast(SessionForest, session.forest)
         response_messages, has_tool_calls = _decode_response_payload(
             args=self.args,

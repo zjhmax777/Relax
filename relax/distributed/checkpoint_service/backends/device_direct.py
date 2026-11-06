@@ -37,6 +37,7 @@ from relax.core.node_group_affinity import with_control_plane_affinity
 from relax.distributed.checkpoint_service.backends.base import CommBackend, TensorFusion
 from relax.distributed.checkpoint_service.config import BackendType, RoleInfo
 from relax.utils.device import device_module
+from relax.utils.generation_provenance import PublicationCursor, enabled as provenance_enabled
 from relax.utils.distributed_utils import get_gloo_group, init_process_group
 from relax.utils.env import Envs
 from relax.utils.http_utils import _wrap_ipv6
@@ -799,6 +800,19 @@ class DeviceDirectBackend(CommBackend):
                 dist.all_reduce(flag, op=dist.ReduceOp.MAX, group=get_gloo_group())
                 push_failed = bool(flag.item())
             if dist.get_rank() == 0:
+                if provenance_enabled() and not push_failed:
+                    try:
+                        tag = PublicationCursor.open(
+                            Envs.RELAX_GENERATION_PROVENANCE_DIR, str(self.model_name)
+                        ).note_successful_publish()
+                        ray.get(
+                            self._batch_request(
+                                "/update_weight_version",
+                                {"new_version": tag, "abort_all_requests": False},
+                            )
+                        )
+                    except Exception:
+                        logger.exception("published-weight provenance was not recorded; rollout resumes")
                 # Continue generation on all rollout nodes
                 logger.info("Resuming generation on all rollout nodes...")
                 self._batch_request("/continue_generation")

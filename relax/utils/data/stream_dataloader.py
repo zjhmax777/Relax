@@ -1151,6 +1151,16 @@ def get_data_from_transfer_queue(
     if has_multimodal and mm_inputs is not None:
         rollout_data["multimodal_train_inputs"] = mm_inputs
 
+    from relax.utils.generation_provenance import RECORD_FIELD, consume_loaded_batch, enabled
+
+    if enabled() and RECORD_FIELD in rollout_data:
+        try:
+            rank = torch.distributed.get_rank() if torch.distributed.is_initialized() else 0
+            consume_loaded_batch(rollout_data, rank=rank)
+        except Exception:
+            logger.exception("generation provenance was dropped; the training batch is unchanged")
+            rollout_data.pop(RECORD_FIELD, None)
+
     if post_process:
         post_process_rollout_data(args, rollout_data)
     else:
